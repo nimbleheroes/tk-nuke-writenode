@@ -121,4 +121,4 @@ supported_engines: [tk-nuke]
 
 # the frameworks required to run this app
 frameworks:
-    - {"name": "tk-framework-nx", "version": "v0.0.x"}
+    - {"name": "tk-framework-nx", "version": "v0.x.x"}
