@@ -19,9 +19,11 @@ import re
 import nuke
 import nukescripts
 
-import tank
-from tank import TankError
-from tank.platform import constants
+import sgtk
+from sgtk import TankError
+from sgtk.platform import constants
+
+nx_utils = sgtk.platform.import_framework("tk-framework-nx", "utils")
 
 # Special exception raised when the work file cannot be resolved.
 
@@ -40,8 +42,11 @@ class TankWriteNodeHandler(object):
     WRITE_NODE_NAME = "Write1"
 
     OUTPUT_KNOB_NAME = "tank_channel"
+    IMG_CATEGORY_KNOB_NAME = "tk_image_categories"
+    PASS_KNOB_NAME = "tank_pass"
+    VIEW_KNOB_NAME = "tank_view"
     USE_NAME_AS_OUTPUT_KNOB_NAME = "tk_use_name_as_channel"
-
+    USE_NK_VIEWS_AS_VIEWS_KNOB_NAME = "tk_use_nuke_views_as_views"
     ################################################################################################
     # Construction
 
@@ -55,7 +60,9 @@ class TankWriteNodeHandler(object):
         # cache the profiles:
         self._promoted_knobs = {}
         self._profile_names = []
+        self._image_categories = []
         self._profiles = {}
+        self._frame_formats = nx_utils.get_sg_formats()
 
         self.__currently_rendering_nodes = set()
         self.__node_computed_path_settings_cache = {}
@@ -65,6 +72,7 @@ class TankWriteNodeHandler(object):
         self.__is_updating_proxy_path = False
 
         self.populate_profiles_from_settings()
+        self.populate_image_categories()
 
     ################################################################################################
     # Properties
@@ -96,6 +104,12 @@ class TankWriteNodeHandler(object):
             self._profile_names.append(name)
             self._profiles[name] = profile
 
+    def populate_image_categories(self):
+        """
+        Sources profile definitions from the current app settings.
+        """
+        self._image_categories = self._app.get_setting("image_categories", [])
+
     def populate_script_template(self):
         """
         Sources the current context's work file template from the parent app.
@@ -124,6 +138,12 @@ class TankWriteNodeHandler(object):
         Return the name of the profile the specified node is using
         """
         return node.knob("profile_name").value()
+
+    def get_node_image_category(self, node):
+        """
+        Return the name of the image_category the specified node is using
+        """
+        return node.knob("image_category").value()
 
     def get_node_tank_type(self, node):
         """
@@ -273,7 +293,7 @@ class TankWriteNodeHandler(object):
             new_node = self.create_new_node(profile_name)
 
             # set the output:
-            self.__set_output(new_node, output_name)
+            self.__set_knob(new_node, TankWriteNodeHandler.OUTPUT_KNOB_NAME, output_name)
 
             # And remove the original metadata
             nuke.delete(n)
@@ -1305,14 +1325,26 @@ class TankWriteNodeHandler(object):
                 write_node.readKnobs("\n".join(filtered_settings))
                 self.reset_render_path(node)
 
-    def __set_output(self, node, output_name):
+    # def __set_output(self, node, output_name):
+    #     """
+    #     Set the output on the specified node from user interaction.
+    #     """
+    #     self._app.log_debug("Changing the output for node '%s' to: %s" % (node.name(), output_name))
+    #
+    #     # update output knob:
+    #     self.__update_knob_value(node, TankWriteNodeHandler.OUTPUT_KNOB_NAME, output_name)
+    #
+    #     # reset the render path:
+    #     self.reset_render_path(node)
+
+    def __set_knob(self, node, knob_name, value):
         """
         Set the output on the specified node from user interaction.
         """
-        self._app.log_debug("Changing the output for node '%s' to: %s" % (node.name(), output_name))
+        self._app.log_debug("Changing the '%s' for node '%s' to: %s" % (knob_name, node.name(), value))
 
         # update output knob:
-        self.__update_knob_value(node, TankWriteNodeHandler.OUTPUT_KNOB_NAME, output_name)
+        self.__update_knob_value(node, knob_name, value)
 
         # reset the render path:
         self.reset_render_path(node)
@@ -1388,18 +1420,18 @@ class TankWriteNodeHandler(object):
             cache_entry = None
             try:
                 # gather the render settings to use when computing the path:
-                render_template, width, height, output_name = self.__gather_render_settings(node, is_proxy)
+                # render_template, width, height, output_name = self.__gather_render_settings(node, is_proxy)
+                render_settings = self.__gather_render_settings(node, is_proxy)
 
                 # experimental settings cache to avoid re-computing the path if nothing has changed...
                 cache_item = self.__node_computed_path_settings_cache.get((node, is_proxy), (None, "", ""))
                 old_cache_entry, compute_path_error, render_path = cache_item
                 cache_entry = {
                     "ctx": self._app.context,
-                    "width": width,
-                    "height": height,
-                    "output": output_name,
                     "script_path": script_path
                 }
+
+                cache_entry.update(render_settings)
 
                 if (not force_reset) and old_cache_entry and cache_entry == old_cache_entry:
                     # nothing of relevance has changed since the last time the path was changed!
@@ -1408,7 +1440,8 @@ class TankWriteNodeHandler(object):
                         raise TkComputePathError(compute_path_error)
                 else:
                     # compute the render path:
-                    render_path = self.__compute_render_path_from(node, render_template, width, height, output_name)
+                    # render_path = self.__compute_render_path_from(node, render_template, width, height, output_name)
+                    render_path = self.__compute_render_path_from(node, render_settings)
 
             except TkComputePathError as e:
                 # update cache:
@@ -1535,7 +1568,7 @@ class TankWriteNodeHandler(object):
             try:
                 path = self.__compute_render_path(node, is_proxy)
             except TkComputePathError:
-                    # ignore
+                # ignore
                 pass
 
         return path
@@ -1555,7 +1588,7 @@ class TankWriteNodeHandler(object):
         fields = template.get_fields(file_name)
 
         # make sure we don't look for any eye - %V or SEQ - %04d stuff
-        frames = self._app.tank.paths_from_template(template, fields, ["SEQ", "eye"])
+        frames = self._app.sgtk.paths_from_template(template, fields, ["SEQ", "eye"])
 
         return frames
 
@@ -1618,11 +1651,14 @@ class TankWriteNodeHandler(object):
 
         :param node:         The current Shotgun Write node
         :param is_proxy:     If True then compute the proxy path, otherwise compute the standard render path
-        :returns:            Tuple containing (render template, width, height, output name)
+        :returns:            Dict containing render settings
         """
         render_template = self.__get_render_template(node, is_proxy)
         width = height = 0
         output_name = ""
+        pass_name = ""
+        view_name = ""
+        use_nk_views_as_views = True
 
         if is_proxy:
             if not render_template:
@@ -1640,12 +1676,38 @@ class TankWriteNodeHandler(object):
             # width & height are set to the node's dimensions:
             width, height = node.width(), node.height()
 
+        pixel_aspect = node.pixelAspect()
+
         if render_template:
             # check for 'channel' for backwards compatibility
             if "output" in render_template.keys or "channel" in render_template.keys:
                 output_name = node.knob(TankWriteNodeHandler.OUTPUT_KNOB_NAME).value()
 
-        return (render_template, width, height, output_name)
+            if "pass" in render_template.keys:
+                pass_name = node.knob(TankWriteNodeHandler.PASS_KNOB_NAME).value()
+
+            if "view" in render_template.keys:
+                view_name = node.knob(TankWriteNodeHandler.VIEW_KNOB_NAME).value()
+                use_nk_views_as_views = node.knob(TankWriteNodeHandler.USE_NK_VIEWS_AS_VIEWS_KNOB_NAME).value()
+
+            if "image_category" in render_template.keys:
+                image_category = node.knob(TankWriteNodeHandler.IMG_CATEGORY_KNOB_NAME).value()
+
+        render_settings = {
+            "render_template": render_template,
+            "width": width,
+            "height": height,
+            "pixel_aspect": pixel_aspect,
+            "output_name": output_name,
+            "layer_name": output_name,
+            "pass_name": pass_name,
+            "view_name": view_name,
+            "image_category": image_category,
+            "use_nk_views_as_views": use_nk_views_as_views
+        }
+
+        return render_settings
+        # return (render_template, width, height, output_name)
 
     def __compute_render_path(self, node, is_proxy=False):
         """
@@ -1657,25 +1719,23 @@ class TankWriteNodeHandler(object):
         """
 
         # gather the render settings to use:
-        render_template, width, height, output_name = self.__gather_render_settings(node, is_proxy)
+        render_settings = self.__gather_render_settings(node, is_proxy)
+        # render_template, width, height, output_name = self.__gather_render_settings(node, is_proxy)
 
         # compute the render path:
-        return self.__compute_render_path_from(node, render_template, width, height, output_name)
+        return self.__compute_render_path_from(node, render_settings)
 
-    def __compute_render_path_from(self, node, render_template, width, height, output_name):
+    def __compute_render_path_from(self, node, render_settings):
         """
         Computes the render path for a node using the specified settings
 
         :param node:               The current Shotgun Write node
-        :param render_template:    The render template to use to construct the render path
-        :param width:              The width of the rendered images
-        :param height:             The height of the rendered images
-        :param output_name:        The toolkit output name specified by the user for this node
+        :param render_settings:    dict of render settings
         :returns:                  The computed render path
         """
 
         # make sure we have a valid template:
-        if not render_template:
+        if not render_settings["render_template"]:
             raise TkComputePathError("Unable to determine the render template to use!")
 
         # get the current script path:
@@ -1695,11 +1755,12 @@ class TankWriteNodeHandler(object):
         fields["SEQ"] = "FORMAT: %d"
 
         # use %V - full view printout as default for the eye field
-        fields["eye"] = "%V"
+        default_view_setup = len(nuke.views()) == 1 and nuke.views()[0] == 'main'
+        # fields["eye"] = "%V"
 
         # add in width & height:
-        fields["width"] = width
-        fields["height"] = height
+        fields["width"] = render_settings["width"]
+        fields["height"] = render_settings["height"]
 
         # add in date values for YYYY, MM, DD
         today = datetime.date.today()
@@ -1707,28 +1768,39 @@ class TankWriteNodeHandler(object):
         fields["MM"] = today.month
         fields["DD"] = today.day
 
+        # custom fields test
+        fields["extension"] = node["tk_file_type"].value()
+        if render_settings["use_nk_views_as_views"] and not default_view_setup:
+            fields["view"] = "%V"
+        elif render_settings["view_name"] != '':
+            fields["view"] = render_settings["view_name"]
+        if render_settings["pass_name"] != '':
+            fields["pass"] = render_settings["pass_name"]
+        fields["frame_format"] = self.__get_format_name(render_settings["width"], render_settings["height"], render_settings["pixel_aspect"])
+        fields["image_category"] = render_settings["image_category"]
+
         # validate the output name - be backwards compatible with 'channel' as well
-        for key_name in ["output", "channel"]:
+        for key_name in ["output", "channel", "layer"]:
             if key_name in fields:
                 del(fields[key_name])
 
-            if key_name in render_template.keys:
-                if not output_name:
-                    if not render_template.is_optional(key_name):
+            if key_name in render_settings["render_template"].keys:
+                if not render_settings["output_name"]:
+                    if not render_settings["render_template"].is_optional(key_name):
                         raise TkComputePathError("A valid output name is required by this profile for the '%s' field!"
                                                  % key_name)
                 else:
-                    if not render_template.keys[key_name].validate(output_name):
-                        raise TkComputePathError("The output name '%s' contains illegal characters!" % output_name)
-                    fields[key_name] = output_name
+                    if not render_settings["render_template"].keys[key_name].validate(render_settings["output_name"]):
+                        raise TkComputePathError("The output name '%s' contains illegal characters!" % render_settings["output_name"])
+                    fields[key_name] = render_settings["output_name"]
 
         # update with additional fields from the context:
-        fields.update(self._app.context.as_template_fields(render_template))
+        fields.update(self._app.context.as_template_fields(render_settings["render_template"]))
 
         # generate the render path:
         path = ""
         try:
-            path = render_template.apply_fields(fields)
+            path = render_settings["render_template"].apply_fields(fields)
         except TankError, e:
             raise TkComputePathError(str(e))
 
@@ -1841,6 +1913,27 @@ class TankWriteNodeHandler(object):
         # and make sure the node is up-to-date with the profile:
         self.__set_profile(node, current_profile_name, reset_all_settings=reset_all_profile_settings)
 
+        # populate the image_category list as this isn't stored with the file and is
+        # dynamic based on the user's configuration
+        image_categories = list(self._image_categories)
+        current_image_category = self.get_node_image_category(node)
+        if current_image_category and current_image_category not in self._image_categories:
+            # image category no longer exists but we need to handle this so add it
+            # to the list:
+            current_image_category = "%s [Not Found]" % current_image_category
+            image_categories.insert(0, current_profile_name)
+
+        list_image_categories = node.knob("tk_image_categories").values()
+        if list_image_categories != image_categories:
+            node.knob("tk_image_categories").setValues(image_categories)
+
+        if not current_image_category:
+            # default to first image category:
+            current_image_category = node.knob("tk_image_categories").value()
+
+        # ensure that the correct entry is selected from the list:
+        self.__update_knob_value(node, "tk_image_categories", current_image_category)
+
         # ensure that the disable value properly propogates to the internal write node:
         write_node = node.node(TankWriteNodeHandler.WRITE_NODE_NAME)
         write_node["disable"].setValue(node["disable"].value())
@@ -1855,7 +1948,10 @@ class TankWriteNodeHandler(object):
         if node.knob(TankWriteNodeHandler.USE_NAME_AS_OUTPUT_KNOB_NAME).value():
             # force output name to be the node name:
             new_output_name = node.knob("name").value()
-            self.__set_output(node, new_output_name)
+            self.__set_knob(node, TankWriteNodeHandler.OUTPUT_KNOB_NAME, new_output_name)
+
+        # ensure the path is updated
+        self.reset_render_path(node)
 
         # now that the node is constructed, we can process
         # knob changes correctly.
@@ -1912,19 +2008,40 @@ class TankWriteNodeHandler(object):
             new_profile_name = knob.value()
             self.__set_profile(node, new_profile_name, reset_all_settings=True)
 
+        if knob.name() == "tk_image_categories":
+            # change the image_category for the specified node:
+            self.reset_render_path(node)
+
+        if knob.name() == "selected":
+            # change the image_category for the specified node:
+            self.reset_render_path(node)
+
         elif knob.name() == TankWriteNodeHandler.OUTPUT_KNOB_NAME:
             # internal cached output has been changed!
             new_output_name = knob.value()
             if node.knob(TankWriteNodeHandler.USE_NAME_AS_OUTPUT_KNOB_NAME).value():
                 # force output name to be the node name:
                 new_output_name = node.knob("name").value()
-            self.__set_output(node, new_output_name)
+            self.__set_knob(node, TankWriteNodeHandler.OUTPUT_KNOB_NAME, new_output_name)
+
+        elif knob.name() == TankWriteNodeHandler.PASS_KNOB_NAME:
+            # internal cached output has been changed!
+            new_pass_name = knob.value()
+            self.__set_knob(node, TankWriteNodeHandler.PASS_KNOB_NAME, new_pass_name)
+
+        elif knob.name() == TankWriteNodeHandler.VIEW_KNOB_NAME:
+            # internal cached output has been changed!
+            new_view_name = knob.value()
+            if node.knob(TankWriteNodeHandler.USE_NK_VIEWS_AS_VIEWS_KNOB_NAME).value():
+                # force output name to be the node name:
+                new_view_name = ""
+            self.__set_knob(node, TankWriteNodeHandler.VIEW_KNOB_NAME, new_view_name)
 
         elif knob.name() == "name":
             # node name has changed:
             if node.knob(TankWriteNodeHandler.USE_NAME_AS_OUTPUT_KNOB_NAME).value():
                 # set the output to the node name:
-                self.__set_output(node, knob.value())
+                self.__set_knob(node, TankWriteNodeHandler.OUTPUT_KNOB_NAME, knob.value())
 
         elif knob.name() == TankWriteNodeHandler.USE_NAME_AS_OUTPUT_KNOB_NAME:
             # checkbox controlling if the name should be used as the output has been toggled
@@ -1932,7 +2049,17 @@ class TankWriteNodeHandler(object):
             node.knob(TankWriteNodeHandler.OUTPUT_KNOB_NAME).setEnabled(not name_as_output)
             if name_as_output:
                 # update output to reflect the node name:
-                self.__set_output(node, node.knob("name").value())
+                self.__set_knob(node, TankWriteNodeHandler.OUTPUT_KNOB_NAME, node.knob("name").value())
+
+        elif knob.name() == TankWriteNodeHandler.USE_NK_VIEWS_AS_VIEWS_KNOB_NAME:
+            # checkbox controlling if the nuke view names shoudld be used
+            use_nk_views = knob.value()
+            node.knob(TankWriteNodeHandler.VIEW_KNOB_NAME).setEnabled(not use_nk_views)
+            if use_nk_views:
+                # update views to reflect the node name:
+                self.__set_knob(node, TankWriteNodeHandler.VIEW_KNOB_NAME, "")
+            else:
+                self.reset_render_path(node)
 
         else:
             # Propogate changes to certain knobs from the gizmo/group to the
@@ -2058,3 +2185,14 @@ class TankWriteNodeHandler(object):
         # populate the initial output name based on the render template:
         render_template = self.get_render_template(node)
         self.__populate_initial_output_name(render_template, node)
+
+    def __get_format_name(self, width, height, pa):
+
+        formatsList = self._frame_formats
+        new_format = nx_utils.FrameFormat(width, height, pa)
+        formatMatch = formatsList.findMatch(new_format)
+
+        if formatMatch:
+            return formatMatch.name()
+        else:
+            return new_format.name()

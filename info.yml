@@ -96,6 +96,14 @@ configuration:
                      is used to drive the version and optionally the name of renders."
         fields: context, version, [name], *
 
+    image_categories:
+        type: list
+        values:
+            type: str
+        description: "Specify a list of image categories to use as a bucket for rendered images in the images folder."
+        allows_empty: False
+        default_value: [comp, precomp]
+
 # the Shotgun fields that this app needs in order to operate correctly
 requires_shotgun_fields:
 
@@ -113,3 +121,4 @@ supported_engines: [tk-nuke]
 
 # the frameworks required to run this app
 frameworks:
+    - {"name": "tk-framework-nx", "version": "v0.0.x"}

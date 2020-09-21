@@ -37,16 +37,24 @@ Gizmo {
     l "sgWrite"
  }
  addUserKnob {
-    4 tk_profile_list
-    l "Profile"
+    4 tk_image_categories
+    l "Image Category"
     M {}
-    t "Select the Profile to use for this node"
+    t "Select the image category for this output"
     +DO_NOT_WRITE
  }
  addUserKnob {
+    4 tk_profile_list
+    l "  Profile"
+    M {}
+    t "Select the Profile to use for this output"
+    -STARTLINE
+    +DO_NOT_WRITE
+ }
+addUserKnob {
     1 tank_channel
-    l "Output"
-    t "Choose an output name for this Write Node to help identify it when you have more than one output in your scene."
+    l "Layer Name"
+    t "Choose a layer name for this Write Node to help identify it when you have more than one output in your scene."
     +STARTLINE
  }
  addUserKnob {
@@ -56,6 +64,27 @@ Gizmo {
     -STARTLINE
  }
  addUserKnob {
+    1 tank_pass
+    l "Pass Name"
+    t "Choose an optional pass name."
+    +STARTLINE
+    +INVISIBLE
+}
+ addUserKnob {
+    1 tank_view
+    l "  View Name"
+    t "Choose an optional pass name."
+    +STARTLINE
+    +DISABLED
+ }
+ addUserKnob {
+    6 tk_use_nuke_views_as_views
+    l "Use nuke views"
+    t "Use the nuke views for view names. If the only view is the default 'main' this will be ignored"
+    -STARTLINE
+ }
+tk_use_nuke_views_as_views true
+addUserKnob {
     6 tk_is_fully_constructed
     l "Is Fully Constructed"
     t "Internal - Gets set to True in 'onCreate'.  All 'knobChanged' calls before this are ignored"
@@ -70,6 +99,12 @@ Gizmo {
     +INVISIBLE
  }
  addUserKnob {
+    1 image_category
+    l "Image Category"
+    t "The cached image_category for this node"
+    +INVISIBLE
+ }
+addUserKnob {
     1 render_template
     l "Sgtk Render Template"
     t "The Sgtk render template associated with this node"
