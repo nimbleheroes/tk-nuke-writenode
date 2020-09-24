@@ -18,6 +18,7 @@ import nuke
 import tank
 from tank import TankError
 
+
 class NukeWriteNode(tank.platform.Application):
 
     def init_app(self):
@@ -255,7 +256,6 @@ class NukeWriteNode(tank.platform.Application):
                                              "\nOK to proceed?",
                                              QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
 
-
             if res != QtGui.QMessageBox.Yes:
                 # User chose to abort the operation, we should not convert the write nodes
                 continue_with_convert = False
@@ -277,19 +277,25 @@ class NukeWriteNode(tank.platform.Application):
         and the convert to and from Shotgun write node actions if configured to do so.
         """
         context = context or self.context
+        first_profile = True
 
         write_node_icon = os.path.join(self.disk_location, "resources", "tk2_write.png")
 
         for profile_name in self.__write_node_handler.profile_names:
+            if first_profile:
+                hotkey = 'w'
+                first_profile = False
+            else:
+                hotkey = None
             # add to toolbar menu
-            cb_fn = lambda pn=profile_name: self.__write_node_handler.create_new_node(pn)
             self.engine.register_command(
                 "sgWrite: %s" % profile_name,
-                cb_fn,
+                lambda pn=profile_name: self.__write_node_handler.create_new_node(pn),
                 dict(
                     type="node",
                     icon=write_node_icon,
                     context=context,
+                    hotkey=hotkey,
                 )
             )
 
@@ -305,8 +311,9 @@ class NukeWriteNode(tank.platform.Application):
             if not promoted_knob_write_nodes:
                 # no presets use promoted knobs so we are OK to register the menus.
 
-                convert_to_write_nodes_action = lambda :self.convert_to_write_nodes(show_warning=True)
-                convert_from_write_nodes_action = lambda: self.convert_from_write_nodes(show_warning=True)
+                def convert_to_write_nodes_action(): return self.convert_to_write_nodes(show_warning=True)
+
+                def convert_from_write_nodes_action(): return self.convert_from_write_nodes(show_warning=True)
 
                 self.engine.register_command(
                     "Convert SG Write Nodes to Write Nodes...",

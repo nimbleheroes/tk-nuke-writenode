@@ -62,7 +62,7 @@ class TankWriteNodeHandler(object):
         self._profile_names = []
         self._image_categories = []
         self._profiles = {}
-        self._frame_formats = nx_utils.get_sg_formats()
+        self._frame_formats = nx_utils.getSgFormats()
 
         self.__currently_rendering_nodes = set()
         self.__node_computed_path_settings_cache = {}
