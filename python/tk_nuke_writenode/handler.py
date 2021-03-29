@@ -42,7 +42,6 @@ class TankWriteNodeHandler(object):
     WRITE_NODE_NAME = "Write1"
 
     OUTPUT_KNOB_NAME = "tank_channel"
-    IMG_CATEGORY_KNOB_NAME = "tk_image_categories"
     PASS_KNOB_NAME = "tank_pass"
     VIEW_KNOB_NAME = "tank_view"
     USE_NAME_AS_OUTPUT_KNOB_NAME = "tk_use_name_as_channel"
@@ -1691,7 +1690,7 @@ class TankWriteNodeHandler(object):
                 use_nk_views_as_views = node.knob(TankWriteNodeHandler.USE_NK_VIEWS_AS_VIEWS_KNOB_NAME).value()
 
             if "image_category" in render_template.keys:
-                image_category = node.knob(TankWriteNodeHandler.IMG_CATEGORY_KNOB_NAME).value()
+                image_category = node.knob("image_category").value()
 
         render_settings = {
             "render_template": render_template,
@@ -1923,16 +1922,17 @@ class TankWriteNodeHandler(object):
             current_image_category = "%s [Not Found]" % current_image_category
             image_categories.insert(0, current_profile_name)
 
-        list_image_categories = node.knob("tk_image_categories").values()
-        if list_image_categories != image_categories:
-            node.knob("tk_image_categories").setValues(image_categories)
+        current_image_categories = node.knob("tk_image_category").values()
+        if current_image_categories != image_categories:
+            node.knob("tk_image_category").setValues(image_categories)
 
         if not current_image_category:
             # default to first image category:
-            current_image_category = node.knob("tk_image_categories").value()
+            current_image_category = node.knob("tk_image_category").value()
 
-        # ensure that the correct entry is selected from the list:
-        self.__update_knob_value(node, "tk_image_categories", current_image_category)
+        # ensure that the correct entry is selected from the list and we cache the value:
+        self.__update_knob_value(node, "tk_image_category", current_image_category)
+        self.__update_knob_value(node, "image_category", current_image_category)
 
         # ensure that the disable value properly propogates to the internal write node:
         write_node = node.node(TankWriteNodeHandler.WRITE_NODE_NAME)
@@ -2008,12 +2008,13 @@ class TankWriteNodeHandler(object):
             new_profile_name = knob.value()
             self.__set_profile(node, new_profile_name, reset_all_settings=True)
 
-        if knob.name() == "tk_image_categories":
+        if knob.name() == "tk_image_category":
             # change the image_category for the specified node:
-            self.reset_render_path(node)
+            new_image_category = knob.value()
+            self.__set_knob(node, "image_category", new_image_category)
 
-        if knob.name() == "selected":
-            # change the image_category for the specified node:
+        # since the format token is driven by the input, we need to update the node on inputChange
+        if knob.name() == "inputChange":
             self.reset_render_path(node)
 
         elif knob.name() == TankWriteNodeHandler.OUTPUT_KNOB_NAME:

@@ -37,7 +37,7 @@ Gizmo {
     l "sgWrite"
  }
  addUserKnob {
-    4 tk_image_categories
+    4 tk_image_category
     l "Image Category"
     M {}
     t "Select the image category for this output"
