@@ -1657,6 +1657,7 @@ class TankWriteNodeHandler(object):
         output_name = ""
         pass_name = ""
         view_name = ""
+        image_category = ""
         use_nk_views_as_views = True
 
         if is_proxy:
